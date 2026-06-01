@@ -7,14 +7,19 @@ from datetime import timedelta
 from app.core.config import settings
 from app.core.database import get_db
 from app.security.jwt import create_access_token, verify_token
-from app.security.hash import verify_password
+from app.security.hash import verify_password, create_password_hash
 from app.services.user_service import UserOperations
 from app.depend.current_user import get_current_user
 import httpx
 from urllib.parse import urlencode
+from app.utils.validate_user_token import validate_activation_token, create_activation_token
+from app.services.EMAIL_SERVICE.notification_service import NotificationService
+
 
 
 router = APIRouter()
+notification = NotificationService()
+
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -23,6 +28,34 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 MICROSOFT_AUTH_URL = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
 MICROSOFT_TOKEN_URL = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
 MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me"
+
+
+@router.get("/activate_user/{token}")
+async def activate_user(token: str, db: Session = Depends(get_db)):
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing token")
+    token_verify = validate_activation_token(token)
+
+    if not token_verify["valid"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+
+    user_ops = UserOperations(db)
+    user = user_ops.get_user_by_id(token_verify["user_id"])
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if user.is_active == 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already activated")
+
+    user_ops.update_user(user_id=user.id, is_active=1)
+    notification.send_welcome_activation_email(
+        recipient_email=user.email,
+        user_name=user.username
+    )
+
+    return {"message": "User activated successfully"}
 
 
 @router.post("/login")
@@ -35,12 +68,33 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if user.is_active == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer", "user_id": user.id, "username": user.username}
 
 
 @router.get("/me")
 async def read_users_me(current_user=Depends(get_current_user)):
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if current_user.is_active == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User Not Active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return {"id": current_user.id, "username": current_user.username, "email": current_user.email, "role": current_user.role}
 
 
@@ -116,16 +170,23 @@ async def google_callback(
     user_ops = UserOperations(db)
     user = user_ops.get_user_by_email(email)
 
+    if user is None or user.is_active == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User Not Active",
+        )
+
     if not user:
         import secrets
         username = name.replace(" ", "_").lower()
         if user_ops.get_user_by_username(username):
             username = f"{username}_{secrets.token_hex(4)}"
+            password=secrets.token_hex(32)
 
         user = user_ops.create_oauth_user(
             username=username,
             email=email,
-            password=secrets.token_hex(32)
+            password=create_password_hash(password),
         )
 
     access_token = create_access_token(data={"sub": user.username})
@@ -150,6 +211,7 @@ async def google_callback(
             <p><strong>Username:</strong> {user.username}</p>
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Role:</strong> {user.role}</p>
+            <p><strong>Password:</strong> {password}</p>
         </div>
         <div>
             <h3>Access Token:</h3>

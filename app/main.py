@@ -10,9 +10,8 @@ from app.routers.auth import router as router_auth
 from app.routers.admin import router as router_admin
 from app.utils.create_super_user import create_user
 from app.core.config import settings
-import logging
+# from app.utils.logger_ import logger
 
-logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Event Management API", version="1.0.0")
 
@@ -41,9 +40,9 @@ async def startup():
     alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
     try:
         command.upgrade(alembic_cfg, "head")
-        logger.info("Database migrations applied successfully")
+        # logger.info("Database migrations applied successfully")
     except Exception as e:
-        logger.warning(f"Alembic migration skipped (may need manual run): {e}")
+        # logger.warning(f"Alembic migration skipped (may need manual run): {e}")
         # Fallback for dev: create tables directly
         from app.core.database import engine, Base
         from app.models.event import Event  # noqa

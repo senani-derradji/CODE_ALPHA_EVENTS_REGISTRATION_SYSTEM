@@ -4,6 +4,7 @@ from app.core.database import get_db
 from app.schemas.event import EventCreate, EventUpdate, EventResponse
 from app.services.event_service import EventOperations
 from app.depend.current_user import get_current_user, required_organization_or_admin
+# from app.services.EMAIL_SERVICE.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -15,7 +16,12 @@ async def create_event(
     current_user=Depends(required_organization_or_admin),
 ):
     event_ops = EventOperations(db)
-    return event_ops.create_event(event, organizer_id=current_user.id)
+
+    created_event = event_ops.create_event(event, organizer_id=current_user.id)
+    if not created_event:
+        raise HTTPException(status_code=400, detail="Failed to create event")
+
+    return created_event
 
 
 @router.get("/get_events/", response_model=list[EventResponse])

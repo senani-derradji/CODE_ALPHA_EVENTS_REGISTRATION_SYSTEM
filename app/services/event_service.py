@@ -5,6 +5,7 @@ from app.schemas.event import EventCreate
 from fastapi import HTTPException, status
 from app.services.user_service import UserOperations
 from typing import Optional
+from app.depend.current_user import get_current_user
 
 
 class EventOperations:
@@ -18,6 +19,11 @@ class EventOperations:
 
     def create_event(self, data: EventCreate, organizer_id: Optional[int] = None):
         existing_event = self.db.query(Event).filter(Event.title == data.title).first()
+        if not organizer_id:
+            if  get_current_user.role == "organization":
+
+                organizer_id = get_current_user.id
+
         if existing_event:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

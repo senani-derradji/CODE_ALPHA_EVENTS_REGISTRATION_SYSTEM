@@ -7,7 +7,7 @@ VALID_STATUSES = {"pending", "confirmed", "cancelled"}
 class RegistrationCreate(BaseModel):
     user_id: int
     event_id: int
-    status: str = "pending"
+    status: str | None = None
 
     @field_validator("user_id", "event_id")
     @classmethod

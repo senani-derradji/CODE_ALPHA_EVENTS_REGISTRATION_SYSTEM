@@ -57,7 +57,7 @@ class RegistrationService:
                 detail="Event is at maximum capacity"
             )
 
-        db_registration = Registration(user_id=user_id, event_id=event_id)
+        db_registration = Registration(user_id=user_id, event_id=event_id, status="Completed")
 
         self.db.add(db_registration)
         self.db.commit()

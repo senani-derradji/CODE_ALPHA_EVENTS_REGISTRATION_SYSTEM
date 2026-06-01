@@ -4,20 +4,36 @@ from app.core.database import get_db
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserCreateResponse
 from app.services.user_service import UserOperations
 from app.depend.current_user import get_current_user, required_admin, required_organization, required_user_or_admin
+from app.services.EMAIL_SERVICE.notification_service import NotificationService
+from app.utils.validate_user_token import validate_activation_token, create_activation_token
+
 
 router = APIRouter()
+notification = NotificationService()
+
 
 @router.post("/create/", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, db: Session = Depends(get_db)):
     user_ops = UserOperations(db)
     created_user = user_ops.create_user(user)
+    if not created_user:
+        raise HTTPException(status_code=400, detail="Failed to create user")
+    
+
+    notification.send_account_activated_email(
+        recipient_email=created_user.get("email"),
+        user_name=created_user.get("username"),
+        token=create_activation_token(created_user.get("user_id"))
+    )
+
     return UserCreateResponse(
         id=created_user.get("user_id"),
         username=created_user.get("username"),
         email=created_user.get("email"),
         role=created_user.get("role"),
         access_token=created_user.get("access_token"),
-        token_type=created_user.get("token_type")
+        token_type=created_user.get("token_type"),
+        is_active=True if created_user.get("is_active") else False
     )
 
 # Admin only: Get all users

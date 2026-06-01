@@ -27,6 +27,18 @@ class Settings(BaseSettings):
 
     REDIS_URL: Optional[str] = None
 
+    admin_username: str
+    admin_email : str
+    admin_password: str
+
+    SENDER_EMAIL: str
+    EMAIL_APP_PASSWORD: str
+
+    TOKEN_VALIDATION_SECRET: str
+
+    DOMAIN: str = "http://localhost:8000"
+
+
     @field_validator("SECRET_KEY")
     @classmethod
     def secret_key_must_not_be_empty(cls, v: str) -> str:

@@ -12,6 +12,8 @@ class User(Base):
     password = Column(String)
     role = Column(String, default="user")
     updated_times = Column(Integer, default=0, nullable=True)
+    is_active = Column(Integer, default=0)
+
 
     registrations = relationship("Registration", back_populates="user", cascade="all, delete-orphan")
     organized_events = relationship("Event", back_populates="organizer")

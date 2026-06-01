@@ -85,6 +85,7 @@ class UserCreateResponse(BaseModel):
     role: str
     access_token: str
     token_type: str
+    is_active: int = 0
 
 
     class Config:
