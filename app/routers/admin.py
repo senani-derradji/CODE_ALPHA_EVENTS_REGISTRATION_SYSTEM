@@ -1,230 +1,406 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.depend.current_user import required_admin
+
 from app.models.user import User
 from app.models.event import Event
 from app.models.registration import Registration
+
 from app.schemas.user import UserResponse
 from app.schemas.event import EventResponse
 from app.schemas.registration import RegstrationResponse
+
 from app.services.user_service import UserOperations
+from app.services.event_service import EventOperations
+from app.services.registration_service import RegistrationService
+
 
 router = APIRouter()
 
 
-# =========================
-# STATS
-# =========================
 @router.get("/stats")
 async def admin_stats(
     db: AsyncSession = Depends(get_db),
     admin=Depends(required_admin)
 ):
+    total_users = (
+        await db.execute(select(func.count(User.id)))
+    ).scalar()
 
-    total_users = (await db.execute(select(func.count(User.id)))).scalar()
-    total_events = (await db.execute(select(func.count(Event.id)))).scalar()
-    total_registrations = (await db.execute(select(func.count(Registration.id)))).scalar()
+    total_events = (
+        await db.execute(select(func.count(Event.id)))
+    ).scalar()
 
-    users_by_role = (await db.execute(
-        select(User.role, func.count(User.id)).group_by(User.role)
-    )).all()
+    total_registrations = (
+        await db.execute(select(func.count(Registration.id)))
+    ).scalar()
 
-    registrations_by_status = (await db.execute(
-        select(Registration.status, func.count(Registration.id))
-        .group_by(Registration.status)
-    )).all()
-
-    top_events = (await db.execute(
-        select(
-            Event.id,
-            Event.title,
-            func.count(Registration.id).label("reg_count")
+    users_by_role = (
+        await db.execute(
+            select(
+                User.role,
+                func.count(User.id)
+            ).group_by(User.role)
         )
-        .outerjoin(Registration, Registration.event_id == Event.id)
-        .group_by(Event.id)
-        .order_by(func.count(Registration.id).desc())
-        .limit(5)
-    )).all()
+    ).all()
+
+    registrations_by_status = (
+        await db.execute(
+            select(
+                Registration.status,
+                func.count(Registration.id)
+            ).group_by(Registration.status)
+        )
+    ).all()
+
+    active_users = (
+        await db.execute(
+            select(func.count(User.id))
+            .where(User.is_active == 1)
+        )
+    ).scalar()
+
+    inactive_users = (
+        await db.execute(
+            select(func.count(User.id))
+            .where(User.is_active == 0)
+        )
+    ).scalar()
+
+    organizations = (
+        await db.execute(
+            select(func.count(User.id))
+            .where(User.role == "organization")
+        )
+    ).scalar()
+
+    admins = (
+        await db.execute(
+            select(func.count(User.id))
+            .where(User.role == "admin")
+        )
+    ).scalar()
+
+    top_events = (
+        await db.execute(
+            select(
+                Event.id,
+                Event.title,
+                func.count(Registration.id).label("registrations")
+            )
+            .outerjoin(
+                Registration,
+                Registration.event_id == Event.id
+            )
+            .group_by(Event.id)
+            .order_by(
+                func.count(Registration.id).desc()
+            )
+            .limit(10)
+        )
+    ).all()
 
     return {
         "totals": {
             "users": total_users,
             "events": total_events,
-            "registrations": total_registrations,
+            "registrations": total_registrations
         },
-        "users_by_role": {r: c for r, c in users_by_role},
-        "registrations_by_status": {s: c for s, c in registrations_by_status},
+        "active_users": active_users,
+        "inactive_users": inactive_users,
+        "organizations": organizations,
+        "admins": admins,
+        "users_by_role": {
+            role: count
+            for role, count in users_by_role
+        },
+        "registrations_by_status": {
+            status: count
+            for status, count in registrations_by_status
+        },
         "top_events": [
-            {"id": e.id, "title": e.title, "registrations": e.reg_count}
+            {
+                "id": e.id,
+                "title": e.title,
+                "registrations": e.registrations
+            }
             for e in top_events
-        ],
+        ]
     }
 
 
-# =========================
-# USERS
-# =========================
-@router.get("/users", response_model=list[UserResponse])
-async def admin_list_users(
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
-):
-    result = await db.execute(
-        select(User).offset(skip).limit(limit)
-    )
-    return result.scalars().all()
-
-
-@router.get("/users/{user_id}", response_model=UserResponse)
-async def admin_get_user(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin)
-):
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(404, "User not found")
-
-    return user
-
 
 @router.put("/users/{user_id}/role")
-async def admin_change_role(
+async def change_user_role(
     user_id: int,
     role: str,
     db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
+    admin=Depends(required_admin)
 ):
-    if role not in ("user", "organization", "admin"):
-        raise HTTPException(400, "Invalid role")
+    if role not in (
+        "user",
+        "organization",
+        "admin"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role"
+        )
 
     user_ops = UserOperations(db)
-    return await user_ops.update_user(user_id, role=role)
+
+    return await user_ops.update_user(
+        user_id,
+        role=role
+    )
 
 
-@router.delete("/users/{user_id}")
-async def admin_delete_user(
+@router.post("/organizations/promote/{user_id}")
+async def promote_to_organization(
     user_id: int,
     db: AsyncSession = Depends(get_db),
     admin=Depends(required_admin)
 ):
     user_ops = UserOperations(db)
-    await user_ops.delete_user(user_id)
-    return None
+
+    return await user_ops.update_user(
+        user_id,
+        role="organization"
+    )
 
 
-# =========================
-# EVENTS
-# =========================
-@router.get("/events", response_model=list[EventResponse])
-async def admin_list_events(
+@router.post("/organizations/demote/{user_id}")
+async def demote_organization(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    user_ops = UserOperations(db)
+
+    return await user_ops.update_user(
+        user_id,
+        role="user"
+    )
+
+
+
+@router.put("/users/{user_id}/activate")
+async def activate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    user_ops = UserOperations(db)
+
+    return await user_ops.update_user(
+        user_id,
+        is_active=1
+    )
+
+
+@router.put("/users/{user_id}/deactivate")
+async def deactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    user_ops = UserOperations(db)
+
+    return await user_ops.update_user(
+        user_id,
+        is_active=0
+    )
+
+
+
+@router.get(
+    "/organizations",
+    response_model=list[UserResponse]
+)
+async def get_organizations(
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    result = await db.execute(
+        select(User)
+        .where(User.role == "organization")
+    )
+
+    return result.scalars().all()
+
+
+@router.get(
+    "/organizations/{organization_id}/events",
+    response_model=list[EventResponse]
+)
+async def get_organization_events(
+    organization_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    event_ops = EventOperations(db)
+
+    return await event_ops.get_events_by_organizer(
+        organization_id
+    )
+
+
+@router.get(
+    "/organizations/{organization_id}/registrations",
+    response_model=list[RegstrationResponse]
+)
+async def get_organization_registrations(
+    organization_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    events = (
+        await db.execute(
+            select(Event.id)
+            .where(
+                Event.organizer_id ==
+                organization_id
+            )
+        )
+    ).scalars().all()
+
+    if not events:
+        return []
+
+    result = await db.execute(
+        select(Registration)
+        .where(
+            Registration.event_id.in_(events)
+        )
+    )
+
+    return result.scalars().all()
+
+
+
+@router.get(
+    "/events",
+    response_model=list[EventResponse]
+)
+async def list_events(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
+    admin=Depends(required_admin)
 ):
     result = await db.execute(
-        select(Event).offset(skip).limit(limit)
+        select(Event)
+        .offset(skip)
+        .limit(limit)
     )
+
     return result.scalars().all()
 
 
 @router.delete("/events/{event_id}")
-async def admin_delete_event(
+async def delete_event(
     event_id: int,
     db: AsyncSession = Depends(get_db),
     admin=Depends(required_admin)
 ):
-    result = await db.execute(
-        select(Event).where(Event.id == event_id)
+    event_ops = EventOperations(db)
+
+    return await event_ops.delete_event(
+        event_id
     )
-    event = result.scalars().first()
-
-    if not event:
-        raise HTTPException(404, "Event not found")
-
-    await db.delete(event)
-    await db.commit()
-    return None
 
 
-# =========================
-# REGISTRATIONS
-# =========================
-@router.get("/registrations", response_model=list[RegstrationResponse])
-async def admin_list_registrations(
+@router.get(
+    "/registrations",
+    response_model=list[RegstrationResponse]
+)
+async def list_registrations(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
+    admin=Depends(required_admin)
 ):
     result = await db.execute(
-        select(Registration).offset(skip).limit(limit)
+        select(Registration)
+        .offset(skip)
+        .limit(limit)
     )
+
     return result.scalars().all()
 
 
-@router.put("/registrations/{registration_id}/status")
-async def admin_update_registration_status(
+@router.get(
+    "/registrations/{registration_id}",
+    response_model=RegstrationResponse
+)
+async def get_registration(
+    registration_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    reg_service = RegistrationService(db)
+
+    return await reg_service.get_registration_by_id(
+        registration_id
+    )
+
+
+@router.delete(
+    "/registrations/{registration_id}"
+)
+async def delete_registration(
+    registration_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(required_admin)
+):
+    reg_service = RegistrationService(db)
+
+    return await reg_service.cancel_registration(
+        registration_id
+    )
+
+
+@router.put(
+    "/registrations/{registration_id}/status"
+)
+async def update_registration_status(
     registration_id: int,
     status_val: str,
     db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
+    admin=Depends(required_admin)
 ):
-
-    if status_val not in ("pending", "confirmed", "cancelled"):
-        raise HTTPException(400, "Invalid status")
+    if status_val not in (
+        "pending",
+        "confirmed",
+        "cancelled"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status"
+        )
 
     result = await db.execute(
-        select(Registration).where(Registration.id == registration_id)
+        select(Registration)
+        .where(
+            Registration.id ==
+            registration_id
+        )
     )
-    reg = result.scalars().first()
 
-    if not reg:
-        raise HTTPException(404, "Registration not found")
+    registration = result.scalars().first()
 
-    reg.status = status_val
+    if not registration:
+        raise HTTPException(
+            status_code=404,
+            detail="Registration not found"
+        )
+
+    registration.status = status_val
+
     await db.commit()
-    await db.refresh(reg)
+    await db.refresh(registration)
 
-    return reg
-
-
-@router.get("/organizers", response_model=list[UserResponse])
-async def admin_list_organizers(
-    db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin),
-):
-    result = await db.execute(
-        select(User).where(User.role == "organization")
-    )
-    return result.scalars().all()
-
-
-@router.post("/organizers/promote/{user_id}", response_model=UserResponse)
-async def admin_promote_to_organizer(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin)
-):
-    user_ops = UserOperations(db)
-    return await user_ops.update_user(user_id, role="organization")
-
-
-@router.post("/organizers/demote/{user_id}", response_model=UserResponse)
-async def admin_demote_organizer(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    admin=Depends(required_admin)
-):
-    user_ops = UserOperations(db)
-    return await user_ops.update_user(user_id, role="user")
+    return registration

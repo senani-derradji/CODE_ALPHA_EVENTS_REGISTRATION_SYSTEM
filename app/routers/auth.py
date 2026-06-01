@@ -367,4 +367,44 @@ async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
         user = await user_ops.create_oauth_user(username=name, email=email, password=secrets.token_hex(32))
 
     access_token = await create_access_token(data={"sub": user.username})
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}?token={access_token}")
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Google OAuth Success</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .token {{ background: #f0f0f0; padding: 10px; border-radius: 5px; word-break: break-all; }}
+            .info {{ margin: 20px 0; padding: 15px; background: #e8f5e9; border-radius: 5px; }}
+            button {{ padding: 10px 20px; margin-top: 20px; cursor: pointer; }}
+        </style>
+    </head>
+    <body>
+        <h1>Google Login Successful!</h1>
+        <div class="info">
+            <h3>User Information:</h3>
+            <p><strong>ID:</strong> {user.id}</p>
+            <p><strong>Username:</strong> {user.username}</p>
+            <p><strong>Email:</strong> {user.email}</p>
+            <p><strong>Role:</strong> {user.role}</p>
+        </div>
+        <div>
+            <h3>Access Token:</h3>
+            <div class="token">{access_token}</div>
+        </div>
+        <button onclick="copyToken()">Copy Token</button>
+        <br><br>
+        <a href="/docs">📚 Go to API Documentation</a>
+
+        <script>
+            function copyToken() {{
+                navigator.clipboard.writeText('{access_token}');
+                alert('Token copied to clipboard!');
+            }}
+        </script>
+    </body>
+    </html>
+    """
+
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)
