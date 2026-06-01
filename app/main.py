@@ -29,28 +29,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def init_db():
+    from app.core.database import Base, engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+
 
 @app.on_event("startup")
 async def startup():
-    # Run alembic migrations on startup (safe for SQLite dev; use CLI in prod)
-    from alembic.config import Config
-    from alembic import command
-    import os
-
-    alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
-    try:
-        command.upgrade(alembic_cfg, "head")
-        # logger.info("Database migrations applied successfully")
-    except Exception as e:
-        # logger.warning(f"Alembic migration skipped (may need manual run): {e}")
-        # Fallback for dev: create tables directly
-        from app.core.database import engine, Base
-        from app.models.event import Event  # noqa
-        from app.models.user import User  # noqa
-        from app.models.registration import Registration  # noqa
-        Base.metadata.create_all(bind=engine)
-
-    create_user()
+    await init_db()
+    await create_user()
 
 
 @app.get("/")

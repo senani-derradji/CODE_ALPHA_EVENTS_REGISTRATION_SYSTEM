@@ -13,7 +13,7 @@ class EmailService:
     SMTP_PORT = 587
 
     @classmethod
-    def send_email(
+    async def send_email(
         cls,
         recipient: str,
         subject: str,

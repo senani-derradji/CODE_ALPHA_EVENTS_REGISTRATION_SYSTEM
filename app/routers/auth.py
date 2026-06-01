@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
 from app.core.config import settings
@@ -12,8 +12,16 @@ from app.services.user_service import UserOperations
 from app.depend.current_user import get_current_user
 import httpx
 from urllib.parse import urlencode
-from app.utils.validate_user_token import validate_activation_token, create_activation_token
+from app.utils.validate_user_token import (
+                                           validate_activation_token,
+                                           create_activation_token,
+                                           validate_reset_password_token,
+                                           create_reset_password_token
+                                           )
 from app.services.EMAIL_SERVICE.notification_service import NotificationService
+from fastapi.responses import HTMLResponse
+from fastapi import Form
+
 
 
 
@@ -31,17 +39,17 @@ MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me"
 
 
 @router.get("/activate_user/{token}")
-async def activate_user(token: str, db: Session = Depends(get_db)):
+async def activate_user(token: str, db: AsyncSession = Depends(get_db)):
 
     if not token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing token")
-    token_verify = validate_activation_token(token)
+    token_verify = await validate_activation_token(token)
 
     if not token_verify["valid"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
     user_ops = UserOperations(db)
-    user = user_ops.get_user_by_id(token_verify["user_id"])
+    user = await user_ops.get_user_by_id(token_verify["user_id"])
 
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -49,8 +57,8 @@ async def activate_user(token: str, db: Session = Depends(get_db)):
     if user.is_active == 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already activated")
 
-    user_ops.update_user(user_id=user.id, is_active=1)
-    notification.send_welcome_activation_email(
+    await user_ops.update_user(user_id=user.id, is_active=1)
+    await notification.send_welcome_activation_email(
         recipient_email=user.email,
         user_name=user.username
     )
@@ -58,11 +66,76 @@ async def activate_user(token: str, db: Session = Depends(get_db)):
     return {"message": "User activated successfully"}
 
 
-@router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@router.post("/request-password-reset")
+async def request_password_reset(email: str, db: AsyncSession = Depends(get_db)):
     user_ops = UserOperations(db)
-    user = user_ops.get_user_by_username(form_data.username)
-    if not user or not verify_password(form_data.password, user.password):
+    user = await user_ops.get_user_by_email(email)
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    token = await create_reset_password_token(user.id)
+
+    await notification.send_reset_password_email(
+        recipient_email=user.email,
+        user_name=user.username,
+        token=token
+    )
+
+    return {"message": "Password reset email sent"}
+
+
+@router.get("/reset-password/{token}", response_class=HTMLResponse)
+async def reset_password_page(token: str):
+    return f"""
+    <html>
+        <body>
+            <h2>Reset Password</h2>
+
+            <form method="post" action="/auth/reset-password-submit">
+                <input type="hidden" name="token" value="{token}" />
+
+                <input type="password" name="password" placeholder="New password" required />
+
+                <button type="submit">Reset Password</button>
+            </form>
+        </body>
+    </html>
+    """
+
+@router.post("/reset-password-submit")
+async def reset_password_submit(
+    token: str = Form(...),
+    password: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    token_validate = await validate_reset_password_token(token)
+
+    if not token_validate["valid"]:
+        raise HTTPException(status_code=400, detail="Invalid token")
+
+    user_ops = UserOperations(db)
+    user = user_ops.get_user_by_id(token_validate["user_id"])
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    hashed_password = await create_password_hash(password)
+
+    await user_ops.update_user(
+        user_id=user.id,
+        password=hashed_password
+    )
+
+    return {"message": "Password reset successfully"}
+
+
+@router.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    user_ops = UserOperations(db)
+    user = await user_ops.get_user_by_username(form_data.username)
+    pass_verify = await verify_password(form_data.password, user.password) if user else False
+    if not user or not pass_verify:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -76,7 +149,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = await create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer", "user_id": user.id, "username": user.username}
 
 
@@ -116,9 +189,9 @@ async def google_login():
 async def google_callback(
     request: Request,
     code: str = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    """Handle Google OAuth callback and display token in HTML"""
+
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Google OAuth not configured")
 
@@ -168,28 +241,40 @@ async def google_callback(
         )
 
     user_ops = UserOperations(db)
-    user = user_ops.get_user_by_email(email)
+    user_check = await user_ops.get_user_by_email(email)
 
-    if user is None or user.is_active == 0:
+    if user_check:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User Not Active",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this email already exists"
         )
 
-    if not user:
+
+    if not user_check:
         import secrets
+        global username
         username = name.replace(" ", "_").lower()
-        if user_ops.get_user_by_username(username):
+        if await user_ops.get_user_by_username(username):
             username = f"{username}_{secrets.token_hex(4)}"
-            password=secrets.token_hex(32)
 
-        user = user_ops.create_oauth_user(
-            username=username,
-            email=email,
-            password=create_password_hash(password),
+    password_ = secrets.token_hex(32)
+
+
+    user = await user_ops.create_oauth_user(
+            username = username,
+            email = email,
+            password = await create_password_hash(password_),
         )
 
-    access_token = create_access_token(data={"sub": user.username})
+    if user.is_active == 0:
+
+        await notification.send_account_activated_email(
+                recipient_email=email,
+                user_name=name,
+                token=await create_activation_token(user.id)
+            )
+
+    access_token = await create_access_token(data={"sub": user.username})
 
     html_content = f"""
     <!DOCTYPE html>
@@ -211,7 +296,6 @@ async def google_callback(
             <p><strong>Username:</strong> {user.username}</p>
             <p><strong>Email:</strong> {user.email}</p>
             <p><strong>Role:</strong> {user.role}</p>
-            <p><strong>Password:</strong> {password}</p>
         </div>
         <div>
             <h3>Access Token:</h3>
@@ -251,7 +335,7 @@ async def microsoft_login():
 
 
 @router.get("/microsoft/callback")
-async def microsoft_callback(code: str, db: Session = Depends(get_db)):
+async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
     if not settings.MICROSOFT_CLIENT_ID:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Microsoft OAuth not configured")
     async with httpx.AsyncClient() as client:
@@ -277,10 +361,10 @@ async def microsoft_callback(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Microsoft account has no email")
 
     user_ops = UserOperations(db)
-    user = user_ops.get_user_by_email(email)
+    user = await user_ops.get_user_by_email(email)
     if not user:
         import secrets
-        user = user_ops.create_oauth_user(username=name, email=email, password=secrets.token_hex(32))
+        user = await user_ops.create_oauth_user(username=name, email=email, password=secrets.token_hex(32))
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = await create_access_token(data={"sub": user.username})
     return RedirectResponse(url=f"{settings.FRONTEND_URL}?token={access_token}")

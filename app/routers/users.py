@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserCreateResponse
 from app.services.user_service import UserOperations
@@ -13,14 +13,14 @@ notification = NotificationService()
 
 
 @router.post("/create/", response_model=UserCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, db: Session = Depends(get_db)):
+async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     user_ops = UserOperations(db)
-    created_user = user_ops.create_user(user)
+    created_user = await user_ops.create_user(user)
     if not created_user:
         raise HTTPException(status_code=400, detail="Failed to create user")
-    
 
-    notification.send_account_activated_email(
+
+    await notification.send_account_activated_email(
         recipient_email=created_user.get("email"),
         user_name=created_user.get("username"),
         token=create_activation_token(created_user.get("user_id"))
@@ -41,17 +41,17 @@ async def create_user(user: UserCreate, db: Session = Depends(get_db)):
 async def get_users(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     admin = Depends(required_admin)
 ):
     user_ops = UserOperations(db)
-    return user_ops.get_users(skip, limit)
+    return await user_ops.get_users(skip, limit)
 
 # Admin or Self: Get specific user
 @router.get("/get_user/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     # Allow if user is admin or is accessing their own profile
@@ -61,7 +61,7 @@ async def get_user(
             detail="Not authorized to view this user"
         )
     user_ops = UserOperations(db)
-    user = user_ops.get_user_by_id(user_id)
+    user = await user_ops.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -71,7 +71,7 @@ async def get_user(
 async def update_user(
     user_id: int,
     user: UserUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
     # Allow if user is admin or is updating their own profile
@@ -82,7 +82,7 @@ async def update_user(
         )
 
     user_ops = UserOperations(db)
-    updated_user = user_ops.update_user(user_id, **user.dict(exclude_unset=True))
+    updated_user = await user_ops.update_user(user_id, **user.dict(exclude_unset=True))
     if not updated_user:
         raise HTTPException(status_code=404, detail="User not found")
     return updated_user
@@ -91,11 +91,11 @@ async def update_user(
 @router.delete("/delete_user/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     admin = Depends(required_admin)
 ):
     user_ops = UserOperations(db)
-    deleted_user = user_ops.delete_user(user_id)
+    deleted_user = await user_ops.delete_user(user_id)
     if not deleted_user:
         raise HTTPException(status_code=404, detail="User not found")
     return None
@@ -104,11 +104,11 @@ async def delete_user(
 @router.put("/promote_to_organization/{user_id}", response_model=UserResponse)
 async def promote_to_organization(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     admin = Depends(required_admin)
 ):
     user_ops = UserOperations(db)
-    updated_user = user_ops.update_user(user_id, role="organization")
+    updated_user = await user_ops.update_user(user_id, role="organization")
     if not updated_user:
         raise HTTPException(status_code=404, detail="User not found")
     return updated_user
