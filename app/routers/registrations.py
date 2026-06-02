@@ -16,7 +16,6 @@ notification = NotificationService()
 @router.post("/create/", response_model=RegstrationResponse, status_code=status.HTTP_201_CREATED)
 async def create_registration(
     event_id: int,
-    # dbRegistrationCreate,
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
@@ -26,11 +25,12 @@ async def create_registration(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if current_user.role == "user":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only register yourself for events"
-        )
+    # if current_user.role == "user":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="You can only register yourself for events"
+    #     )
+
     from app.schemas.registration import RegistrationCreate
     registration = RegistrationCreate(
         user_id=current_user.id,

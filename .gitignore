@@ -11,3 +11,4 @@ build/
 alembic.ini
 migrations/
 *virtual*
+*.zip

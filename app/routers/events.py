@@ -69,7 +69,7 @@ async def count_events(db: AsyncSession = Depends(get_db), current_user=Depends(
     return await event_ops.count_events()
 
 
-@router.get("check_user_in_event/{user_email}/{event_id}", response_model=bool)
+@router.get("/check_user_in_event/{user_email}/{event_id}", response_model=bool)
 async def check_user_in_event(
     event_id: int,
     user_email: str,
