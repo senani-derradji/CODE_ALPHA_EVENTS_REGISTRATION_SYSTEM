@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
@@ -21,8 +21,6 @@ from app.utils.validate_user_token import (
 )
 from app.services.EMAIL_SERVICE.notification_service import NotificationService
 from fastapi import Form
-from fastapi.responses import HTMLResponse
-
 
 router = APIRouter()
 notification = NotificationService()
@@ -35,57 +33,221 @@ MICROSOFT_AUTH_URL = f"https://login.microsoftonline.com/{settings.MICROSOFT_TEN
 MICROSOFT_TOKEN_URL = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
 MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me"
 
-# ------------------- Activation, Password Reset (unchanged) -------------------
-@router.get("/activate_user/{token}")
+# Helper function to generate HTML responses
+def html_response(message: str, title: str = "Message", status_code: int = 200) -> HTMLResponse:
+    return HTMLResponse(
+        content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{title}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .success {{
+                    color: #4CAF50;
+                }}
+                .error {{
+                    color: #f44336;
+                }}
+                button {{
+                    margin-top: 1rem;
+                    padding: 10px 20px;
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }}
+                button:hover {{
+                    background-color: #45a049;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>{title}</h1>
+                <p>{message}</p>
+                <button onclick="window.location.href='/'">Go to Home</button>
+            </div>
+        </body>
+        </html>
+        """,
+        status_code=status_code
+    )
+
+def error_html_response(message: str, title: str = "Error", status_code: int = 400) -> HTMLResponse:
+    return HTMLResponse(
+        content=f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{title}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .error {{
+                    color: #f44336;
+                }}
+                button {{
+                    margin-top: 1rem;
+                    padding: 10px 20px;
+                    background-color: #f44336;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }}
+                button:hover {{
+                    background-color: #d32f2f;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="error">{title}</h1>
+                <p>{message}</p>
+                <button onclick="window.location.href='/'">Go to Home</button>
+            </div>
+        </body>
+        </html>
+        """,
+        status_code=status_code
+    )
+
+# ------------------- Activation, Password Reset -------------------
+@router.get("/activate_user/{token}", response_class=HTMLResponse)
 async def activate_user(token: str, db: AsyncSession = Depends(get_db)):
     if not token:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing token")
+        return error_html_response("Missing token", "Activation Failed")
+
     token_verify = await validate_activation_token(token)
     if not token_verify["valid"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
+        return error_html_response("Invalid token", "Activation Failed")
+
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_id(token_verify["user_id"])
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return error_html_response("User not found", "Activation Failed")
+
     if user.is_active == 1:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User already activated")
+        return error_html_response("User already activated", "Activation Failed")
+
     await user_ops.update_user(user_id=user.id, is_active=1)
     await notification.send_welcome_activation_email(
         recipient_email=user.email,
         user_name=user.username
     )
-    return {"message": "User activated successfully"}
 
-@router.post("/request-password-reset")
-async def request_password_reset(email: str, db: AsyncSession = Depends(get_db)):
+    return html_response(f"Welcome {user.username}! Your account has been activated successfully.", "Account Activated")
+
+@router.post("/request-password-reset", response_class=HTMLResponse)
+async def request_password_reset(email: str = Form(...), db: AsyncSession = Depends(get_db)):
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_email(email)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return error_html_response("User not found", "Password Reset Request Failed")
+
     token = await create_reset_password_token(user.id)
     await notification.send_reset_password_email(
         recipient_email=user.email,
         user_name=user.username,
         token=token
     )
-    return {"message": "Password reset email sent"}
+
+    return html_response(
+        "Password reset email has been sent to your email address. Please check your inbox.",
+        "Password Reset Request Sent"
+    )
 
 @router.get("/reset-password/{token}", response_class=HTMLResponse)
 async def reset_password_page(token: str):
-    return f"""
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
     <html>
-        <body>
+    <head>
+        <title>Reset Password</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                text-align: center;
+                padding: 2rem;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                width: 300px;
+            }}
+            input {{
+                width: 100%;
+                padding: 10px;
+                margin: 10px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }}
+            button {{
+                width: 100%;
+                padding: 10px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }}
+            button:hover {{
+                background-color: #45a049;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
             <h2>Reset Password</h2>
             <form method="post" action="/auth/reset-password-submit">
                 <input type="hidden" name="token" value="{token}" />
                 <input type="password" name="password" placeholder="New password" required />
                 <button type="submit">Reset Password</button>
             </form>
-        </body>
+        </div>
+    </body>
     </html>
-    """
+    """)
 
-@router.post("/reset-password-submit")
+@router.post("/reset-password-submit", response_class=HTMLResponse)
 async def reset_password_submit(
     token: str = Form(...),
     password: str = Form(...),
@@ -93,61 +255,155 @@ async def reset_password_submit(
 ):
     token_validate = await validate_reset_password_token(token)
     if not token_validate["valid"]:
-        raise HTTPException(status_code=400, detail="Invalid token")
+        return error_html_response("Invalid token", "Password Reset Failed")
+
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_id(token_validate["user_id"])
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return error_html_response("User not found", "Password Reset Failed")
+
     hashed_password = await create_password_hash(password)
     await user_ops.update_user(user_id=user.id, password=hashed_password)
-    return {"message": "Password reset successfully"}
 
-@router.post("/login")
+    return html_response("Password has been reset successfully. You can now login with your new password.", "Password Reset Complete")
+
+@router.post("/login", response_class=HTMLResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_username(form_data.username)
     pass_verify = await verify_password(form_data.password, user.password) if user else False
-    if not user or not pass_verify:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if user.is_active == 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User is not active",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token = await create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer", "user_id": user.id, "username": user.username}
 
-@router.get("/me")
+    if not user or not pass_verify:
+        return error_html_response("Incorrect username or password", "Login Failed", 401)
+
+    if user.is_active == 0:
+        return error_html_response("User is not active. Please activate your account.", "Login Failed", 401)
+
+    access_token = await create_access_token(data={"sub": user.username})
+
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Login Successful</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                text-align: center;
+                padding: 2rem;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+            .success {{
+                color: #4CAF50;
+            }}
+            pre {{
+                background-color: #f5f5f5;
+                padding: 1rem;
+                border-radius: 4px;
+                text-align: left;
+                overflow-x: auto;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1 class="success">Login Successful!</h1>
+            <p>Welcome back, {user.username}!</p>
+            <h3>Your Access Token:</h3>
+            <pre>{access_token}</pre>
+            <p><strong>Token Type:</strong> bearer</p>
+            <p><strong>User ID:</strong> {user.id}</p>
+            <button onclick="window.location.href='/'">Go to Home</button>
+        </div>
+    </body>
+    </html>
+    """)
+
+@router.get("/me", response_class=HTMLResponse)
 async def read_users_me(current_user=Depends(get_current_user)):
     if current_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if current_user.is_active == 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User Not Active",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "role": current_user.role,
-        "picture": getattr(current_user, "picture", None)  # optional
-    }
+        return error_html_response("Could not validate credentials", "Authentication Failed", 401)
 
-@router.get("/google")
+    if current_user.is_active == 0:
+        return error_html_response("User Not Active", "Authentication Failed", 401)
+
+    picture = getattr(current_user, "picture", None)
+
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>User Profile</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                padding: 2rem;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                max-width: 500px;
+                width: 100%;
+            }}
+            .profile-pic {{
+                width: 100px;
+                height: 100px;
+                border-radius: 50%;
+                object-fit: cover;
+                margin: 0 auto 1rem;
+                display: block;
+            }}
+            .info {{
+                margin: 1rem 0;
+                padding: 0.5rem;
+                background-color: #f9f9f9;
+                border-radius: 4px;
+            }}
+            .label {{
+                font-weight: bold;
+                color: #555;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1 style="text-align: center;">User Profile</h1>
+            {f'<img src="{picture}" alt="Profile Picture" class="profile-pic">' if picture else ''}
+            <div class="info">
+                <div><span class="label">ID:</span> {current_user.id}</div>
+                <div><span class="label">Username:</span> {current_user.username}</div>
+                <div><span class="label">Email:</span> {current_user.email}</div>
+                <div><span class="label">Role:</span> {current_user.role}</div>
+                {f'<div><span class="label">Picture:</span> {picture}</div>' if picture else ''}
+            </div>
+            <button onclick="window.location.href='/'">Go to Home</button>
+        </div>
+    </body>
+    </html>
+    """)
+
+@router.get("/google", response_class=RedirectResponse)
 async def google_login():
     if not settings.GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Google OAuth not configured")
+        return error_html_response("Google OAuth not configured", "Configuration Error", 501)
+
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,
@@ -158,16 +414,17 @@ async def google_login():
     }
     return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{urlencode(params)}")
 
-@router.get("/google/callback")
+@router.get("/google/callback", response_class=RedirectResponse)
 async def google_callback(
     request: Request,
     code: str = None,
     db: AsyncSession = Depends(get_db)
 ):
     if not settings.GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Google OAuth not configured")
+        return error_html_response("Google OAuth not configured", "Configuration Error", 501)
+
     if not code:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing authorization code")
+        return error_html_response("Missing authorization code", "Authentication Failed", 400)
 
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(GOOGLE_TOKEN_URL, data={
@@ -178,27 +435,29 @@ async def google_callback(
             "grant_type": "authorization_code",
         })
         if token_resp.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to exchange Google code")
+            return error_html_response("Failed to exchange Google code", "Authentication Failed", 400)
+
         token_data = token_resp.json()
         userinfo_resp = await client.get(
             GOOGLE_USERINFO_URL,
             headers={"Authorization": f"Bearer {token_data['access_token']}"}
         )
         if userinfo_resp.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to fetch Google user info")
+            return error_html_response("Failed to fetch Google user info", "Authentication Failed", 400)
+
         userinfo = userinfo_resp.json()
 
     email = userinfo.get("email")
     name = userinfo.get("name") or userinfo.get("given_name", email.split("@")[0] if email else "user")
-    picture = userinfo.get("picture")  # Google profile image URL
+    picture = userinfo.get("picture")
+
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google account has no email")
+        return error_html_response("Google account has no email", "Authentication Failed", 400)
 
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_email(email)
 
     if not user:
-
         username = name.replace(" ", "_").lower()
         if await user_ops.get_user_by_username(username):
             username = f"{username}_{secrets.token_hex(4)}"
@@ -207,24 +466,14 @@ async def google_callback(
             username=username,
             email=email,
             password=await create_password_hash(password_),
-            # is_active=1,
-            # picture=picture
         )
-        # Optionally send welcome email
         await notification.send_welcome_activation_email(
             recipient_email=email,
             user_name=user.username
         )
-    # else:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_400_BAD_REQUEST,
-    #         detail="User already exists"
-    #     )
 
-    # Generate JWT
     access_token = await create_access_token(data={"sub": user.username})
 
-    # Redirect to frontend OAuth callback with token and user info
     frontend_url = settings.DOMAIN.rstrip('/')
     redirect_url = (
         f"{frontend_url}/#/oauth-callback"
@@ -237,10 +486,11 @@ async def google_callback(
     return RedirectResponse(url=redirect_url)
 
 # ------------------- Microsoft OAuth -------------------
-@router.get("/microsoft")
+@router.get("/microsoft", response_class=RedirectResponse)
 async def microsoft_login():
     if not settings.MICROSOFT_CLIENT_ID:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Microsoft OAuth not configured")
+        return error_html_response("Microsoft OAuth not configured", "Configuration Error", 501)
+
     params = {
         "client_id": settings.MICROSOFT_CLIENT_ID,
         "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
@@ -250,10 +500,11 @@ async def microsoft_login():
     }
     return RedirectResponse(url=f"{MICROSOFT_AUTH_URL}?{urlencode(params)}")
 
-@router.get("/microsoft/callback")
+@router.get("/microsoft/callback", response_class=RedirectResponse)
 async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
     if not settings.MICROSOFT_CLIENT_ID:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Microsoft OAuth not configured")
+        return error_html_response("Microsoft OAuth not configured", "Configuration Error", 501)
+
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(MICROSOFT_TOKEN_URL, data={
             "code": code,
@@ -264,24 +515,26 @@ async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
             "scope": "openid email profile User.Read",
         })
         if token_resp.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to exchange Microsoft code")
+            return error_html_response("Failed to exchange Microsoft code", "Authentication Failed", 400)
+
         token_data = token_resp.json()
         userinfo_resp = await client.get(MICROSOFT_USERINFO_URL, headers={"Authorization": f"Bearer {token_data['access_token']}"})
         if userinfo_resp.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to fetch Microsoft user info")
+            return error_html_response("Failed to fetch Microsoft user info", "Authentication Failed", 400)
+
         userinfo = userinfo_resp.json()
 
     email = userinfo.get("mail") or userinfo.get("userPrincipalName")
     name = userinfo.get("displayName") or (email.split("@")[0] if email else None)
+
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Microsoft account has no email")
+        return error_html_response("Microsoft account has no email", "Authentication Failed", 400)
 
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_email(email)
 
     if not user:
-        # Create new user
-        username = name.replace(" ", "_").lower()
+        username = name.replace(" ", "_").lower() if name else email.split("@")[0].lower()
         if await user_ops.get_user_by_username(username):
             username = f"{username}_{secrets.token_hex(4)}"
         password_ = secrets.token_hex(32)
@@ -295,7 +548,6 @@ async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
             recipient_email=email,
             user_name=user.username
         )
-    # Microsoft Graph does not give photo in this basic call; we could fetch it separately, but skip for brevity
 
     access_token = await create_access_token(data={"sub": user.username})
     frontend_url = settings.DOMAIN.rstrip('/')

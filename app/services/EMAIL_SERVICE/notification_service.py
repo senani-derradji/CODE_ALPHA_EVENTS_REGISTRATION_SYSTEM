@@ -39,7 +39,7 @@ Thank you.
 </html>
 """
 
-        return EmailService.send_email(
+        return await EmailService.send_email(
             recipient=recipient_email,
             subject=subject,
             body=text_body,
@@ -101,7 +101,7 @@ Thank you.
 </html>
 """
 
-        return EmailService.send_email(
+        return await EmailService.send_email(
             recipient=recipient_email,
             subject=subject,
             body=text_body,
@@ -143,7 +143,7 @@ Thank you.
 </html>
 """
 
-        return EmailService.send_email(
+        return await EmailService.send_email(
             recipient=recipient_email,
             subject=subject,
             body=text_body,
@@ -212,7 +212,7 @@ Thank you.
 </html>
 """
 
-        return EmailService.send_email(
+        return await EmailService.send_email(
             recipient=recipient_email,
             subject=subject,
             body=text_body,

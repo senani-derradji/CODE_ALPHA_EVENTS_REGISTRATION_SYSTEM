@@ -23,7 +23,7 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     await notification.send_account_activated_email(
         recipient_email=created_user.get("email"),
         user_name=created_user.get("username"),
-        token=create_activation_token(created_user.get("user_id"))
+        token=await create_activation_token(created_user.get("user_id"))
     )
 
     return UserCreateResponse(

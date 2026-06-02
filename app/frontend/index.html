@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<!-- PRODUCTION: Set this to your API URL if the frontend is served from a different origin.
+     Example: <meta name="api-base" content="https://api.yourdomain.com">
+     Leave commented out when the frontend is served by the same FastAPI process. -->
+<!-- <meta name="api-base" content="https://api.yourdomain.com"> -->
 <title>EventFlow — Event Management Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
@@ -626,7 +630,16 @@ tbody tr:hover td{background:var(--bg-3);color:var(--text)}
    =================================================================== */
 
 /* ─── CONFIG ─────────────────────────────────────────── */
-const API_BASE = 'http://localhost:8000';
+// Auto-detect API base: works on any host (localhost, staging, production).
+// Override by setting window.API_BASE_OVERRIDE before this script runs,
+// or by setting a <meta name="api-base" content="https://api.example.com"> tag.
+const API_BASE = (()=>{
+  const metaTag = document.querySelector('meta[name="api-base"]');
+  if(metaTag) return metaTag.content.replace(/\/$/,'');
+  if(window.API_BASE_OVERRIDE) return window.API_BASE_OVERRIDE.replace(/\/$/,'');
+  // Same origin (frontend served by the backend, e.g. FastAPI StaticFiles)
+  return window.location.origin;
+})();
 
 /* ─── UTILITY HELPERS ────────────────────────────────── */
 const $ = (s,c=document)=>c.querySelector(s);
@@ -2158,21 +2171,22 @@ Router.register('#/admin/registrations', ()=>Pages.renderAdminRegistrations());
   document.documentElement.setAttribute('data-theme',savedTheme);
   App._updateThemeIcon(savedTheme);
 
-  // BUG FIX: Handle OAuth2 callback — backend redirects to /?oauth_token=...&oauth_picture=...
-  // The frontend must read these params, save them to localStorage, strip the URL, then proceed.
+  // ── OAuth2 callback handler ──────────────────────────────────────────────
+  // The backend redirects to /?oauth_token=...&oauth_picture=...&oauth_provider=...
+  // We MUST fully resolve the session (token + user profile) BEFORE the router
+  // dispatches, otherwise the router sees an unauthenticated state and renders
+  // the landing/404 page for a split second (or permanently on slow connections).
   const urlParams=new URLSearchParams(window.location.search);
   const oauthToken=urlParams.get('oauth_token');
   const oauthPicture=urlParams.get('oauth_picture');
   const oauthProvider=urlParams.get('oauth_provider');
 
   if(oauthToken){
-    // Save the token just like a normal login
+    // 1. Persist token immediately so Auth.isLoggedIn() returns true from this point on.
     Auth.setToken(oauthToken);
-    // Save the profile picture if provided
-    if(oauthPicture){
-      Auth.setPicture(decodeURIComponent(oauthPicture));
-    }
-    // Fetch the user profile using the new token
+    if(oauthPicture) Auth.setPicture(decodeURIComponent(oauthPicture));
+
+    // 2. Fetch full user profile with the new token.
     try{
       const me=await API.get('/auth/me');
       Auth.setUser(me);
@@ -2182,16 +2196,19 @@ Router.register('#/admin/registrations', ()=>Pages.renderAdminRegistrations());
       Auth.logout();
       Toast.error('OAuth sign-in failed. Please try again.');
     }
-    // Clean the URL so the tokens don't stay in browser history
-    const cleanUrl=window.location.pathname+'#/dashboard';
-    window.history.replaceState({},'',cleanUrl);
+
+    // 3. Replace the URL — remove query params AND set the hash to #/dashboard
+    //    so when Router.init() dispatches below it goes straight to the dashboard.
+    //    Use replaceState so the OAuth callback URL never appears in browser history.
+    window.history.replaceState({},'',window.location.pathname+'#/dashboard');
   }
 
-  // Refresh auth if token already exists (normal page reload)
+  // ── Normal page reload: refresh session from stored token ────────────────
   if(Auth.getToken()&&!oauthToken){
     await Auth.refresh();
   }
 
+  // ── Boot the app — router dispatches AFTER session is fully resolved ─────
   App.render();
   Router.init();
 })();

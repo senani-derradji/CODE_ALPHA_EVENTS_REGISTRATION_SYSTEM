@@ -36,7 +36,7 @@ class UserOperations:
         await self.db.commit()
         await self.db.refresh(db_user)
 
-        access_token = create_access_token({"sub": db_user.username})
+        access_token = await create_access_token({"sub": db_user.username})
 
         return {
             "access_token": access_token,
