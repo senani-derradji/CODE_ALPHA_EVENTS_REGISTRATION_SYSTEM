@@ -63,9 +63,7 @@ async def get_registrations(
 
     registration_service = RegistrationService(db)
     registrations = await registration_service.get_registrations_by_user(user_id)
-    if not registrations:
-        raise HTTPException(status_code=404, detail="No registrations found for this user")
-    return registrations
+    return registrations or []
 
 
 
@@ -84,9 +82,7 @@ async def get_registrations_by_user(
 
     registration_service = RegistrationService(db)
     registrations = await registration_service.get_registrations_by_user(user_id)
-    if not registrations:
-        raise HTTPException(status_code=404, detail="No registrations found for this user")
-    return registrations
+    return registrations or []
 
 
 
@@ -105,9 +101,7 @@ async def get_registrations_by_event(
 
     registration_service = RegistrationService(db)
     registrations = await registration_service.get_registrations_by_event(event_id)
-    if not registrations:
-        raise HTTPException(status_code=404, detail="No registrations found for this event")
-    return registrations
+    return registrations or []
 
 @router.get("/get_registration/{registration_id}", response_model=RegstrationResponse)
 async def get_registration(

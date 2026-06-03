@@ -24,6 +24,14 @@ async def get_current_user(
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_username(username)
 
+    if user.is_active == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User is not active",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
     if user is None:
         raise credentials_exception
 

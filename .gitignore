@@ -16,14 +16,14 @@ migrations/
 *.zip
 *.md
 
-*frontend/node_modules/
-*frontend/dist/
-*frontend/build/
-*frontend/.vite/
-*frontend/.cache/
-*frontend/.env
-*frontend/.env.*
-*frontend/coverage/
+app/frontend/node_modules/
+app/frontend/dist/
+app/frontend/build/
+app/frontend/.vite/
+app/frontend/.cache/
+app/frontend/.env
+app/frontend/.env.*
+app/frontend/coverage/
 
 *.log
 .DS_Store
