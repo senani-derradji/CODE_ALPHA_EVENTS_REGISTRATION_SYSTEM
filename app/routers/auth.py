@@ -1,4 +1,3 @@
-from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -170,16 +169,12 @@ async def activate_user(token: str, db: AsyncSession = Depends(get_db)):
 
     return html_response(f"Welcome {user.username}! Your account has been activated successfully.", "Account Activated")
 
-class PasswordResetRequestBody(BaseModel):
-    email: str
-
-@router.post("/request-password-reset")
-async def request_password_reset(body: PasswordResetRequestBody, db: AsyncSession = Depends(get_db)):
+@router.post("/request-password-reset", response_class=HTMLResponse)
+async def request_password_reset(email: str = Form(...), db: AsyncSession = Depends(get_db)):
     user_ops = UserOperations(db)
-    user = await user_ops.get_user_by_email(body.email)
+    user = await user_ops.get_user_by_email(email)
     if not user:
-        # Don't reveal if user exists for security, but still return success
-        return JSONResponse(content={"message": "If that email exists, a reset link has been sent."})
+        return error_html_response("User not found", "Password Reset Request Failed")
 
     token = await create_reset_password_token(user.id)
     await notification.send_reset_password_email(
@@ -188,7 +183,10 @@ async def request_password_reset(body: PasswordResetRequestBody, db: AsyncSessio
         token=token
     )
 
-    return JSONResponse(content={"message": "Password reset email has been sent. Please check your inbox."})
+    return html_response(
+        "Password reset email has been sent to your email address. Please check your inbox.",
+        "Password Reset Request Sent"
+    )
 
 @router.get("/reset-password/{token}", response_class=HTMLResponse)
 async def reset_password_page(token: str):
@@ -249,74 +247,147 @@ async def reset_password_page(token: str):
     </html>
     """)
 
-class PasswordResetSubmitBody(BaseModel):
-    token: str
-    new_password: str
-    confirm_password: str
-
-@router.post("/reset-password-submit")
+@router.post("/reset-password-submit", response_class=HTMLResponse)
 async def reset_password_submit(
-    body: PasswordResetSubmitBody,
+    token: str = Form(...),
+    password: str = Form(...),
     db: AsyncSession = Depends(get_db)
 ):
-    if body.new_password != body.confirm_password:
-        raise HTTPException(status_code=400, detail="Passwords do not match")
-
-    token_validate = await validate_reset_password_token(body.token)
+    token_validate = await validate_reset_password_token(token)
     if not token_validate["valid"]:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        return error_html_response("Invalid token", "Password Reset Failed")
+
+    user_ops = UserOperations(db)
+    user = await user_ops.get_user_by_id(token_validate["user_id"])
+    if not user:
+        return error_html_response("User not found", "Password Reset Failed")
+
+    hashed_password = await create_password_hash(password)
+    await user_ops.update_user(user_id=user.id, password=hashed_password)
+
+    return html_response("Password has been reset successfully. You can now login with your new password.", "Password Reset Complete")
+
+@router.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    user_ops = UserOperations(db)
+    user = await user_ops.get_user_by_username(form_data.username)
+    pass_verify = await verify_password(form_data.password, user.password) if user else False
+
+    if not user or not pass_verify:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+
+    if user.is_active == 0:
+        raise HTTPException(status_code=401, detail="User is not active. Please activate your account.")
+
+    access_token = await create_access_token(data={"sub": user.username})
+
+    return JSONResponse(content={
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+    })
+
+@router.post("/reset-password")
+async def reset_password_json(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """JSON endpoint for frontend reset-password calls."""
+    body = await request.json()
+    token = body.get("token", "")
+    new_password = body.get("new_password", "")
+
+    if not token or not new_password:
+        raise HTTPException(status_code=400, detail="Missing token or new_password")
+
+    token_validate = await validate_reset_password_token(token)
+    if not token_validate["valid"]:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user_ops = UserOperations(db)
     user = await user_ops.get_user_by_id(token_validate["user_id"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    hashed_password = await create_password_hash(body.new_password)
+    from app.security.hash import create_password_hash
+    hashed_password = await create_password_hash(new_password)
     await user_ops.update_user(user_id=user.id, password=hashed_password)
 
-    return JSONResponse(content={"message": "Password has been reset successfully."})
+    return JSONResponse(content={"message": "Password reset successfully"})
 
-@router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    user_ops = UserOperations(db)
-    # Accept both username and email in the username field
-    user = await user_ops.get_user_by_username(form_data.username)
-    if not user:
-        user = await user_ops.get_user_by_email(form_data.username)
-    pass_verify = await verify_password(form_data.password, user.password) if user else False
 
-    if not user or not pass_verify:
-        raise HTTPException(status_code=401, detail="Incorrect credentials")
-
-    if user.is_active == 0:
-        raise HTTPException(status_code=401, detail="Account not active. Please check your email to activate your account.")
-
-    access_token = await create_access_token(data={"sub": user.username})
-
-    return JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
-
-@router.get("/me")
+@router.get("/me", response_class=HTMLResponse)
 async def read_users_me(current_user=Depends(get_current_user)):
     if current_user is None:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        return error_html_response("Could not validate credentials", "Authentication Failed", 401)
 
     if current_user.is_active == 0:
-        raise HTTPException(status_code=401, detail="User Not Active")
+        return error_html_response("User Not Active", "Authentication Failed", 401)
 
-    return JSONResponse(content={
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "role": current_user.role,
-        "full_name": getattr(current_user, "full_name", None),
-        "bio": getattr(current_user, "bio", None),
-        "phone": getattr(current_user, "phone", None),
-        "profile_picture": getattr(current_user, "profile_picture", getattr(current_user, "picture", None)),
-        "is_active": bool(current_user.is_active),
-        "is_verified": bool(getattr(current_user, "is_verified", False)),
-        "created_at": str(getattr(current_user, "created_at", "")) or "",
-        "updated_at": str(getattr(current_user, "updated_at", "")) if getattr(current_user, "updated_at", None) else None,
-    })
+    picture = getattr(current_user, "picture", None)
+
+    return HTMLResponse(content=f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>User Profile</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background-color: #f5f5f5;
+            }}
+            .container {{
+                padding: 2rem;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                max-width: 500px;
+                width: 100%;
+            }}
+            .profile-pic {{
+                width: 100px;
+                height: 100px;
+                border-radius: 50%;
+                object-fit: cover;
+                margin: 0 auto 1rem;
+                display: block;
+            }}
+            .info {{
+                margin: 1rem 0;
+                padding: 0.5rem;
+                background-color: #f9f9f9;
+                border-radius: 4px;
+            }}
+            .label {{
+                font-weight: bold;
+                color: #555;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1 style="text-align: center;">User Profile</h1>
+            {f'<img src="{picture}" alt="Profile Picture" class="profile-pic">' if picture else ''}
+            <div class="info">
+                <div><span class="label">ID:</span> {current_user.id}</div>
+                <div><span class="label">Username:</span> {current_user.username}</div>
+                <div><span class="label">Email:</span> {current_user.email}</div>
+                <div><span class="label">Role:</span> {current_user.role}</div>
+                {f'<div><span class="label">Picture:</span> {picture}</div>' if picture else ''}
+            </div>
+            <button onclick="window.location.href='/'">Go to Home</button>
+        </div>
+    </body>
+    </html>
+    """)
 
 @router.get("/google", response_class=RedirectResponse)
 async def google_login():
@@ -395,7 +466,7 @@ async def google_callback(
 
     frontend_url = settings.DOMAIN.rstrip('/')
     redirect_url = (
-        f"{frontend_url}"
+        f"{frontend_url}/#/oauth-callback"
         f"?token={access_token}"
         f"&username={quote(user.username)}"
         f"&email={quote(user.email)}"
@@ -471,7 +542,7 @@ async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
     access_token = await create_access_token(data={"sub": user.username})
     frontend_url = settings.DOMAIN.rstrip('/')
     redirect_url = (
-        f"{frontend_url}"
+        f"{frontend_url}/#/oauth-callback"
         f"?token={access_token}"
         f"&username={quote(user.username)}"
         f"&email={quote(user.email)}"

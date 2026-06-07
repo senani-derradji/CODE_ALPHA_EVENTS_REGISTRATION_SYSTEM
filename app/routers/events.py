@@ -74,7 +74,7 @@ async def check_user_in_event(
     event_id: int,
     user_email: str,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(required_organization_or_admin),
+    # current_user=Depends(get_current_user),
 ):
     event_ops = EventOperations(db)
 

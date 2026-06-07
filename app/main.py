@@ -56,10 +56,13 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
+from app.background.notification import start_scheduler
+
 @app.on_event("startup")
 async def startup():
     await init_db()
     await create_user()
+    start_scheduler()
 
 
 @app.get("/", include_in_schema=False)
