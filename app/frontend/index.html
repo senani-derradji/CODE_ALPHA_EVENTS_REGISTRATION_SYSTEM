@@ -1871,15 +1871,11 @@
   </div>
 </div>
 
-<!-- ════════════════════════════════════════
-     SCRIPT
-════════════════════════════════════════ -->
 <script>
 'use strict';
 
-const API_URL = window.ENV_API_URL || 'http://localhost:8000';
+const API_URL = window.location.origin;
 
-// ── Theme / Dark Mode ── (instant, full-cascade via CSS vars on <html>)
 function setTheme(mode) {
   localStorage.setItem('eh_theme', mode);
   applyTheme(mode);
