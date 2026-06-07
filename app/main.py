@@ -121,3 +121,16 @@ async def health_check():
         "service": "event-management-api",
         "version": "1.0.0",
     }
+
+
+from fastapi import HTTPException
+FRONTEND_HTML_PATH = BASE_DIR / "frontend" / "index.html"
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    if not FRONTEND_HTML_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Frontend layout file targets missing. Checked destination structural path parameters: {FRONTEND_HTML_PATH}"
+        )
+    return FileResponse(FRONTEND_HTML_PATH)
