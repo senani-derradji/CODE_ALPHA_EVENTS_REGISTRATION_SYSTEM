@@ -1,25 +1,24 @@
-fastapi>=0.116.0
-uvicorn[standard]>=0.35.0
+fastapi
+uvicorn[standard]
 
-sqlalchemy>=2.0.40
-alembic>=1.16.0
+sqlalchemy
+aiosqlite
 
-pydantic[email]>=2.13.0
+pydantic
+pydantic-settings
 
-python-dotenv>=1.1.0
-python-jose[cryptography]>=3.5.0
-passlib[argon2]>=1.7.4
-python-multipart>=0.0.20
+python-jose[cryptography]
+passlib[bcrypt]
 
-httpx>=0.28.1
+httpx
 
-psycopg2-binary>=2.9.10
-redis>=6.0.0
+redis
 
-apscheduler>=3.11.0
-qrcode[pil]>=8.0
+apscheduler
 
-pytest>=8.4.0
-pytest-asyncio>=1.0.0
+qrcode[pil]
+pillow
 
-pydantic-settings>=2.10.0
+python-multipart
+
+email-validator
