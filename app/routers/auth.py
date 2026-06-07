@@ -162,10 +162,13 @@ async def activate_user(token: str, db: AsyncSession = Depends(get_db)):
         return error_html_response("User already activated", "Activation Failed")
 
     await user_ops.update_user(user_id=user.id, is_active=1)
-    await notification.send_welcome_activation_email(
+    try :
+        await notification.send_welcome_activation_email(
         recipient_email=user.email,
         user_name=user.username
-    )
+        )
+    except Exception as e:
+        print(e)
 
     return html_response(f"Welcome {user.username}! Your account has been activated successfully.", "Account Activated")
 
@@ -177,11 +180,15 @@ async def request_password_reset(email: str = Form(...), db: AsyncSession = Depe
         return error_html_response("User not found", "Password Reset Request Failed")
 
     token = await create_reset_password_token(user.id)
-    await notification.send_reset_password_email(
+    try:
+        await notification.send_reset_password_email(
         recipient_email=user.email,
         user_name=user.username,
         token=token
-    )
+     )
+    except Exception as e:
+        print(e)
+
 
     return html_response(
         "Password reset email has been sent to your email address. Please check your inbox.",
@@ -457,10 +464,15 @@ async def google_callback(
             email=email,
             password=await create_password_hash(password_),
         )
-        await notification.send_welcome_activation_email(
+        try:
+            await notification.send_welcome_activation_email(
             recipient_email=email,
             user_name=user.username
-        )
+            )
+        except Exception as e:
+            print(e)
+
+
 
     access_token = await create_access_token(data={"sub": user.username})
 
@@ -534,10 +546,14 @@ async def microsoft_callback(code: str, db: AsyncSession = Depends(get_db)):
             password=await create_password_hash(password_),
             is_active=1
         )
-        await notification.send_welcome_activation_email(
+        try:
+            await notification.send_welcome_activation_email(
             recipient_email=email,
             user_name=user.username
         )
+        except Exception as e:
+            print(e)
+
 
     access_token = await create_access_token(data={"sub": user.username})
     frontend_url = settings.DOMAIN.rstrip('/')

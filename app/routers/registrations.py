@@ -38,13 +38,17 @@ async def create_registration(
     )
 
 
-    await notification.send_registration_confirmation(
+    try:
+        await notification.send_registration_confirmation(
         recipient_email=current_user.email,
         user_name=current_user.username,
         event_name=event.title,
         user_id=current_user.id,
         event_id=event.id,
     )
+    except Exception as e:
+        print(e)
+
 
 
     registration_service = RegistrationService(db)

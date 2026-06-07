@@ -19,12 +19,14 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     if not created_user:
         raise HTTPException(status_code=400, detail="Failed to create user")
 
-
-    await notification.send_account_activated_email(
+    try:
+        await notification.send_account_activated_email(
         recipient_email=created_user.get("email"),
         user_name=created_user.get("username"),
         token=await create_activation_token(created_user.get("user_id"))
-    )
+        )
+    except Exception as e:
+        print(e)
 
     return UserCreateResponse(
         id=created_user.get("user_id"),
