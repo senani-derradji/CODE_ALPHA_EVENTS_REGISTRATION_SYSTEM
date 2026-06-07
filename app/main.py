@@ -68,7 +68,7 @@ async def startup():
           DEBUG :
           {settings.DATABASE_URL}
           {settings.SECRET_KEY}
-          {settings.ACCESS_TOKEN_EXPIRE_MINUTES}
+          {settings.ACCESS_TOKEN_EXPIRE_HOURS}
           {settings.FRONTEND_URL}
           {settings.DOMAIN}
           {settings.RATE_LIMIT_API}
