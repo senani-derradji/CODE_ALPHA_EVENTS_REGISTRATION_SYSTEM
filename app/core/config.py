@@ -13,14 +13,14 @@ class Settings(BaseSettings):
 
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str
 
     MICROSOFT_CLIENT_ID: str = ""
     MICROSOFT_CLIENT_SECRET: str = ""
-    MICROSOFT_REDIRECT_URI: str = "http://localhost:8000/auth/microsoft/callback"
-    MICROSOFT_TENANT_ID: str = "common"
+    MICROSOFT_REDIRECT_URI: str
+    MICROSOFT_TENANT_ID: str
 
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str
 
     RATE_LIMIT_AUTH: int = 10
     RATE_LIMIT_API: int = 100
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     TOKEN_VALIDATION_SECRET: str
 
-    DOMAIN: str = "http://localhost:8000"
+    DOMAIN: str
 
 
     @field_validator("SECRET_KEY")
