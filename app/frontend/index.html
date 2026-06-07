@@ -523,11 +523,13 @@
     }
 
     /* ══════════════════════════════════════
-       EVENT CARDS
+       EVENT CARDS — production polish
     ══════════════════════════════════════ */
-    .event-card { overflow: hidden; position: relative; }
-    .event-card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(99,102,241,.15); }
+    .event-card { overflow: hidden; position: relative; border-radius: var(--radius-lg) !important; }
+    .event-card:hover { transform: translateY(-5px); box-shadow: 0 16px 48px rgba(99,102,241,.18); }
     .event-card .card-img-wrap { position: relative; overflow: hidden; }
+    .event-card .card-img-wrap > div { transition: transform .5s cubic-bezier(.22,1,.36,1); }
+    .event-card:hover .card-img-wrap > div { transform: scale(1.06); }
     .event-card .card-img-overlay {
       position: absolute; inset: 0;
       background: linear-gradient(to top, rgba(0,0,0,.45) 0%, transparent 60%);
@@ -535,18 +537,6 @@
       transition: opacity .3s ease;
     }
     .event-card:hover .card-img-overlay { opacity: 1; }
-    /* Shimmer sweep on hover */
-    .event-card::after {
-      content: '';
-      position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
-      transform: skewX(-20deg);
-      transition: none;
-      pointer-events: none;
-    }
-    .event-card:hover::after {
-      animation: shimmerSweep .7s ease forwards;
-    }
 
     /* ══════════════════════════════════════
        TABS
@@ -2267,33 +2257,40 @@ function filterEvents(search){
 
 function eventCard(e){
   const isFree=e.price===0;
-  const pct=Math.round((e.attendees/e.capacity)*100);
+  const pct=Math.min(100,Math.round((e.attendees/e.capacity)*100));
   const catColors={tech:'badge-blue',music:'badge-purple',business:'badge-green',art:'badge-orange',sport:'badge-red'};
-  return `<div class="card event-card" onclick="openEvent(${e.id})">
-    <div class="card-img-wrap" style="height:180px">
-      <div style="height:180px;background:url('${e.image}') center/cover no-repeat;position:relative">
-        <div class="card-img-overlay"></div>
-        <span class="badge ${catColors[e.category]||'badge-gray'}" style="position:absolute;top:.75rem;left:.75rem;text-transform:capitalize">${e.category}</span>
-        ${isFree?`<span class="badge badge-green" style="position:absolute;top:.75rem;right:.75rem">Free</span>`:`<span class="badge badge-gray" style="position:absolute;top:.75rem;right:.75rem">${e.price.toLocaleString()} DZD</span>`}
+  const spotsLeft=Math.max(0,e.capacity-e.attendees);
+  const urgencyBar=spotsLeft<=20&&spotsLeft>0?`<div style="display:flex;align-items:center;gap:.375rem;font-size:.7rem;font-weight:600;color:#c2410c;margin-top:.25rem"><span style="width:6px;height:6px;border-radius:50%;background:#f97316;display:inline-block"></span>${spotsLeft} spots left</div>`:'';
+  return `<div class="card event-card" onclick="openEvent(${e.id})" style="cursor:pointer;transition:transform .25s,box-shadow .25s">
+    <div class="card-img-wrap" style="height:188px;position:relative;overflow:hidden">
+      <div style="height:188px;background:url('${e.image}') center/cover no-repeat;transition:transform .4s ease"></div>
+      <div class="card-img-overlay"></div>
+      <div style="position:absolute;top:.875rem;left:.875rem;right:.875rem;display:flex;justify-content:space-between;align-items:flex-start">
+        <span class="badge ${catColors[e.category]||'badge-gray'}" style="backdrop-filter:blur(6px);text-transform:capitalize">${e.category}</span>
+        ${isFree?`<span class="badge badge-green" style="backdrop-filter:blur(6px)">Free</span>`:`<span class="badge" style="background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(6px)">${e.price.toLocaleString()} DZD</span>`}
       </div>
     </div>
     <div class="p-5 event-card-body">
-      <h3 style="font-size:1rem;font-weight:700;line-height:1.3;margin-bottom:.5rem;color:var(--text)">${e.title}</h3>
-      <div class="flex flex-col gap-1.5 mb-4">
-        <div class="flex items-center gap-1.5" style="font-size:.75rem;color:var(--text-muted)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          ${formatDate(e.date)} · ${e.time}
+      <h3 style="font-size:.9375rem;font-weight:700;line-height:1.35;margin-bottom:.625rem;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${e.title}</h3>
+      <div style="display:flex;flex-direction:column;gap:.375rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:var(--text-muted)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span style="font-weight:500">${formatDate(e.date)} · ${e.time}</span>
         </div>
-        <div class="flex items-center gap-1.5" style="font-size:.75rem;color:var(--text-muted)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          ${e.location}
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.75rem;color:var(--text-muted)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.location}</span>
         </div>
       </div>
-      <div class="mb-3">
-        <div class="flex justify-between mb-1" style="font-size:.75rem;color:var(--text-subtle)"><span>${e.attendees} attending</span><span>${pct}%</span></div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div style="margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.375rem">
+          <span style="font-size:.72rem;font-weight:600;color:var(--text-muted)">${e.attendees.toLocaleString()} attending</span>
+          <span style="font-size:.72rem;color:var(--text-subtle)">${pct}%</span>
+        </div>
+        <div class="progress-bar" style="height:5px"><div class="progress-fill" style="width:${pct}%;background:${pct>=90?'linear-gradient(90deg,#ef4444,#f97316)':pct>=70?'linear-gradient(90deg,#f59e0b,#f97316)':'linear-gradient(90deg,#6366f1,#a855f7)'}"></div></div>
+        ${urgencyBar}
       </div>
-      <button class="btn btn-primary btn-full btn-sm" onclick="event.stopPropagation();openEvent(${e.id})">View details</button>
+      <button class="btn btn-primary btn-full btn-sm" onclick="event.stopPropagation();openEvent(${e.id})" style="font-size:.8125rem">View details →</button>
     </div>
   </div>`;
 }
@@ -2301,95 +2298,281 @@ function eventCardFromAPI(e){
   const startDt=e.start_time?new Date(e.start_time):null;
   const dateStr=startDt?startDt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—';
   const timeStr=startDt?startDt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
-  return `<div class="card event-card" onclick="openEvent(${e.id})">
-    <div class="card-img-wrap">
-      <div style="height:140px;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;position:relative">
+  const attendees=e.attendees_count??e.attendees??0;
+  const capacity=e.max_attendees??e.capacity??500;
+  const pct=Math.min(100,Math.round((attendees/capacity)*100));
+  const price=e.ticket_price??e.price??0;
+  const gradients=['linear-gradient(135deg,#4338ca,#6366f1)','linear-gradient(135deg,#0f766e,#0891b2)','linear-gradient(135deg,#7c3aed,#db2777)','linear-gradient(135deg,#b45309,#d97706)','linear-gradient(135deg,#047857,#10b981)'];
+  const grad=gradients[(e.id||0)%gradients.length];
+  return `<div class="card event-card" onclick="openEvent(${e.id})" style="cursor:pointer">
+    <div class="card-img-wrap" style="height:140px;position:relative;overflow:hidden">
+      <div style="height:140px;${e.image?`background:url('${e.image}') center/cover no-repeat`:`background:${grad}`};display:flex;align-items:center;justify-content:center;position:relative">
         <div class="card-img-overlay"></div>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        ${!e.image?`<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="position:relative;z-index:1"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`:''}
       </div>
+      ${price===0?`<span class="badge badge-green" style="position:absolute;top:.75rem;right:.75rem;backdrop-filter:blur(6px)">Free</span>`:`<span class="badge" style="position:absolute;top:.75rem;right:.75rem;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(6px)">${price.toLocaleString()} DZD</span>`}
     </div>
-    <div class="p-5 event-card-body">
-      <h3 style="font-size:1rem;font-weight:700;line-height:1.3;margin-bottom:.5rem;color:var(--text)">${e.title}</h3>
-      <p style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem">${(e.description||'').slice(0,80)}${(e.description?.length||0)>80?'…':''}</p>
-      <div class="flex flex-col gap-1.5 mb-4">
-        <div class="flex items-center gap-1.5" style="font-size:.75rem;color:var(--text-muted)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          ${dateStr} · ${timeStr}
+    <div class="p-4 event-card-body">
+      <h3 style="font-size:.9rem;font-weight:700;line-height:1.35;margin-bottom:.375rem;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${e.title}</h3>
+      ${e.description?`<p style="font-size:.72rem;color:var(--text-muted);margin-bottom:.625rem;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${e.description}</p>`:''}
+      <div style="display:flex;flex-direction:column;gap:.3rem;margin-bottom:.875rem">
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.72rem;color:var(--text-muted)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span style="font-weight:500">${dateStr}${timeStr?' · '+timeStr:''}</span>
         </div>
-        <div class="flex items-center gap-1.5" style="font-size:.75rem;color:var(--text-muted)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          ${e.location||'TBD'}
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.72rem;color:var(--text-muted)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span style="font-weight:500">${e.location||'TBD'}</span>
         </div>
       </div>
-      <button class="btn btn-primary btn-full btn-sm" onclick="event.stopPropagation();openEvent(${e.id})">View details</button>
+      <div style="margin-bottom:.875rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:.3rem">
+          <span style="font-size:.7rem;font-weight:600;color:var(--text-muted)">${attendees} attending</span>
+          <span style="font-size:.7rem;color:var(--text-subtle)">${pct}%</span>
+        </div>
+        <div class="progress-bar" style="height:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>
+      <button class="btn btn-primary btn-full btn-sm" onclick="event.stopPropagation();openEvent(${e.id})" style="font-size:.775rem">View details →</button>
     </div>
   </div>`;
 }
 function openEvent(id){window._currentEventId=id;navigate('/event-detail');}
 
-// ── Event detail ──
+// ── Event detail — current event data store ──
+window._currentEventData = null;
+
 async function renderEventDetail(){
   const id=window._currentEventId;
   const content=document.getElementById('event-detail-content');
-  content.innerHTML='<div class="skeleton" style="height:320px;border-radius:12px;margin-bottom:1.5rem"></div><div class="skeleton" style="height:200px;border-radius:12px"></div>';
+  content.innerHTML=`
+    <div style="animation:fadeUp .35s ease both">
+      <div class="skeleton" style="height:380px;border-radius:20px;margin-bottom:1.5rem"></div>
+      <div style="display:grid;grid-template-columns:1fr 340px;gap:1.5rem">
+        <div class="skeleton" style="height:280px;border-radius:16px"></div>
+        <div class="skeleton" style="height:280px;border-radius:16px"></div>
+      </div>
+    </div>`;
   let e;
   try{e=await api.get('/events/get_event/'+id);}
   catch{e=_allEvents.find(x=>x.id===id)||MOCK_EVENTS.find(x=>x.id===id);}
-  if(!e){content.innerHTML='<p style="color:var(--text-muted)">Event not found</p>';return;}
+  if(!e){content.innerHTML='<div class="card p-16 text-center"><p style="color:var(--text-muted)">Event not found</p></div>';return;}
+  window._currentEventData=e;
+  _renderEventDetailUI(e);
+}
+
+function _renderEventDetailUI(e){
+  const content=document.getElementById('event-detail-content');
   const u=currentUser();
   const isReg=u?.registered_events?.includes(e.id);
   const attendees=e.attendees_count??e.attendees??0;
   const capacity=e.capacity??e.max_attendees??500;
-  const pct=Math.round((attendees/capacity)*100);
+  const spots=Math.max(0,capacity-attendees);
+  const pct=Math.min(100,Math.round((attendees/capacity)*100));
   const price=e.price??e.ticket_price??0;
   const image=e.image??e.cover_image??e.banner_url??'';
   const organizer=e.organizer??e.organizer_name??'';
   const startDt=e.start_time?new Date(e.start_time):null;
   const timeStr=e.time??(startDt?startDt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'');
   const dateStr=e.date??(startDt?startDt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'');
+  const urgency=spots<=10&&spots>0?`<div style="display:flex;align-items:center;gap:.5rem;padding:.625rem 1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;margin-bottom:1rem;font-size:.8rem;font-weight:600;color:#c2410c">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+    Only ${spots} spot${spots===1?'':'s'} left — act fast!
+  </div>`:spots===0?`<div style="display:flex;align-items:center;gap:.5rem;padding:.625rem 1rem;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:1rem;font-size:.8rem;font-weight:600;color:#dc2626">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    This event is fully booked
+  </div>`:'';
+
+  const categoryBadges={tech:'badge-blue',music:'badge-purple',business:'badge-green',art:'badge-orange',sport:'badge-red'};
+  const heroGradients=['linear-gradient(135deg,#4338ca,#6366f1,#a855f7)','linear-gradient(135deg,#0f766e,#0891b2,#3b82f6)','linear-gradient(135deg,#7c3aed,#db2777)','linear-gradient(135deg,#b45309,#d97706,#f59e0b)','linear-gradient(135deg,#047857,#10b981,#6ee7b7)'];
+  const heroGrad=heroGradients[(e.id||0)%heroGradients.length];
+
   content.innerHTML=`
-    <button class="btn btn-ghost btn-sm mb-6" onclick="navigate('/events')">← Back to events</button>
-    <div class="card overflow-hidden mb-6">
-      ${image?`<div style="height:320px;background:url('${image}') center/cover no-repeat"></div>`:''}
-      <div class="p-8">
-        <div class="flex flex-wrap gap-2 mb-4">
-          ${e.category?`<span class="badge badge-blue">${e.category}</span>`:''}
-          ${price===0?'<span class="badge badge-green">Free</span>':`<span class="badge badge-gray">${price.toLocaleString()} DZD</span>`}
+  <div style="animation:fadeUp .4s cubic-bezier(.22,1,.36,1) both">
+    <!-- Back -->
+    <button class="btn btn-ghost btn-sm mb-5" onclick="navigate('/events')" style="gap:.375rem;padding-left:.5rem">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to events
+    </button>
+
+    <!-- Hero Banner -->
+    <div style="border-radius:20px;overflow:hidden;margin-bottom:1.5rem;position:relative;${image?`background:url('${image}') center/cover no-repeat`:`background:${heroGrad}`};height:340px;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.18) 50%,transparent 100%)"></div>
+      <div style="position:absolute;bottom:0;left:0;right:0;padding:2rem 2.5rem">
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+          ${e.category?`<span class="badge ${categoryBadges[e.category]||'badge-gray'}" style="backdrop-filter:blur(8px)">${e.category}</span>`:''}
+          ${price===0?'<span class="badge badge-green" style="backdrop-filter:blur(8px)">Free admission</span>':`<span class="badge badge-orange" style="backdrop-filter:blur(8px)">${price.toLocaleString()} DZD</span>`}
+          ${isReg?'<span class="badge badge-green" style="backdrop-filter:blur(8px)">✓ You\'re registered</span>':''}
         </div>
-        <h1 style="font-size:2rem;font-weight:800;line-height:1.2;margin-bottom:1rem;color:var(--text)">${e.title}</h1>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div class="flex items-center gap-2" style="color:var(--text-muted)">
-            <div class="stat-icon" style="background:#ede9fe;width:36px;height:36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-            <div><p style="font-size:.75rem;color:var(--text-subtle);font-weight:600">Date &amp; Time</p><p style="font-weight:600;font-size:.875rem;color:var(--text)">${formatDate(dateStr)} · ${timeStr}</p></div>
-          </div>
-          <div class="flex items-center gap-2" style="color:var(--text-muted)">
-            <div class="stat-icon" style="background:#dbeafe;width:36px;height:36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
-            <div><p style="font-size:.75rem;color:var(--text-subtle);font-weight:600">Location</p><p style="font-weight:600;font-size:.875rem;color:var(--text)">${e.location||'TBD'}</p></div>
-          </div>
-          <div class="flex items-center gap-2" style="color:var(--text-muted)">
-            <div class="stat-icon" style="background:#d1fae5;width:36px;height:36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-            <div><p style="font-size:.75rem;color:var(--text-subtle);font-weight:600">Organizer</p><p style="font-weight:600;font-size:.875rem;color:var(--text)">${organizer}</p></div>
-          </div>
-        </div>
-        <p style="color:var(--text-muted);line-height:1.7;margin-bottom:1.5rem">${e.description||''}</p>
-        <div class="mb-6">
-          <div class="flex justify-between text-sm mb-2"><span style="font-weight:600;color:var(--text)">${attendees} / ${capacity} attending</span><span style="color:var(--text-muted)">${pct}% full</span></div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-        </div>
-        ${isReg?`<button class="btn btn-success btn-lg">✓ Registered</button>`:
-          `<button class="btn btn-primary btn-lg" onclick="registerForEvent(${e.id})">Register now${price>0?' — '+price.toLocaleString()+' DZD':''}</button>`}
+        <h1 style="font-size:clamp(1.5rem,4vw,2.25rem);font-weight:800;color:#fff;line-height:1.15;margin:0;text-shadow:0 2px 16px rgba(0,0,0,.4)">${e.title}</h1>
       </div>
-    </div>`;
+    </div>
+
+    <!-- Two-column layout -->
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:1.5rem;align-items:start" id="ed-layout">
+
+      <!-- LEFT: Details -->
+      <div style="display:flex;flex-direction:column;gap:1.25rem">
+
+        <!-- Info pills row -->
+        <div class="card" style="padding:1.5rem;display:flex;flex-wrap:wrap;gap:1rem">
+          <div style="display:flex;align-items:center;gap:.75rem;min-width:160px;flex:1">
+            <div style="width:40px;height:40px;border-radius:10px;background:#ede9fe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <div>
+              <p style="font-size:.7rem;font-weight:700;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.1rem">Date &amp; Time</p>
+              <p style="font-weight:600;font-size:.875rem;color:var(--text)">${formatDate(dateStr)}${timeStr?' · '+timeStr:''}</p>
+            </div>
+          </div>
+          <div style="width:1px;background:var(--border);flex-shrink:0;display:none" class="info-sep"></div>
+          <div style="display:flex;align-items:center;gap:.75rem;min-width:160px;flex:1">
+            <div style="width:40px;height:40px;border-radius:10px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <div>
+              <p style="font-size:.7rem;font-weight:700;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.1rem">Location</p>
+              <p style="font-weight:600;font-size:.875rem;color:var(--text)">${e.location||'TBD'}</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:.75rem;min-width:160px;flex:1">
+            <div style="width:40px;height:40px;border-radius:10px;background:#d1fae5;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <div>
+              <p style="font-size:.7rem;font-weight:700;color:var(--text-subtle);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.1rem">Organizer</p>
+              <p style="font-weight:600;font-size:.875rem;color:var(--text)">${organizer||'EventHub'}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Description -->
+        ${e.description?`<div class="card" style="padding:1.75rem">
+          <h2 style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            About this event
+          </h2>
+          <p style="color:var(--text-muted);line-height:1.8;font-size:.9375rem">${e.description}</p>
+        </div>`:''}
+
+      </div>
+
+      <!-- RIGHT: Registration card -->
+      <div id="ed-reg-card" style="position:sticky;top:calc(var(--nav-h) + 1.25rem)">
+        <div class="card" style="padding:1.75rem;border-top:3px solid var(--primary)">
+
+          <!-- Price header -->
+          <div style="margin-bottom:1.25rem">
+            <div style="font-size:1.75rem;font-weight:800;color:${price===0?'var(--success)':'var(--text)'};line-height:1">
+              ${price===0?'Free':'DZD '+price.toLocaleString()}
+            </div>
+            ${price>0?`<p style="font-size:.75rem;color:var(--text-subtle);margin-top:.25rem">per attendee</p>`:''}
+          </div>
+
+          <!-- Divider -->
+          <div style="height:1px;background:var(--border);margin-bottom:1.25rem"></div>
+
+          <!-- Live attendee counter -->
+          <div style="margin-bottom:1.25rem">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.625rem">
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <div style="width:8px;height:8px;border-radius:50%;background:${spots===0?'var(--danger)':pct>=75?'var(--warning)':'var(--success)'};animation:${spots===0?'none':'notifPulse 2s infinite'}"></div>
+                <span style="font-size:.875rem;font-weight:700;color:var(--text)" id="ed-attendees-label">${attendees} / ${capacity} attending</span>
+              </div>
+              <span style="font-size:.75rem;font-weight:600;color:${pct>=90?'var(--danger)':pct>=75?'var(--warning)':'var(--text-muted)'}" id="ed-pct-label">${pct}% full</span>
+            </div>
+            <div class="progress-bar" style="height:8px;border-radius:999px">
+              <div class="progress-fill" id="ed-progress-fill" style="width:${pct}%;background:${pct>=90?'linear-gradient(90deg,#ef4444,#f97316)':pct>=75?'linear-gradient(90deg,#f59e0b,#f97316)':'linear-gradient(90deg,#6366f1,#a855f7)'}"></div>
+            </div>
+            ${spots>0?`<p style="font-size:.75rem;color:var(--text-subtle);margin-top:.5rem" id="ed-spots-label">${spots} spot${spots===1?'':'s'} remaining</p>`:`<p style="font-size:.75rem;color:var(--danger);font-weight:600;margin-top:.5rem" id="ed-spots-label">Fully booked</p>`}
+          </div>
+
+          ${urgency}
+
+          <!-- CTA -->
+          ${isReg
+            ?`<div style="display:flex;flex-direction:column;gap:.75rem">
+              <button class="btn btn-success btn-full btn-lg" style="cursor:default;pointer-events:none;font-size:.9375rem">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                You're registered
+              </button>
+              <p style="text-align:center;font-size:.75rem;color:var(--text-subtle)">A confirmation has been sent to your email</p>
+            </div>`
+            :spots===0
+            ?`<button class="btn btn-secondary btn-full btn-lg" disabled style="opacity:.6;cursor:not-allowed">Fully booked</button>`
+            :`<button class="btn btn-primary btn-full btn-lg" id="ed-reg-btn" onclick="registerForEvent(${e.id})" style="font-size:.9375rem">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                Register now${price>0?' — '+price.toLocaleString()+' DZD':''}
+              </button>
+              ${!isLoggedIn()?`<p style="text-align:center;font-size:.75rem;color:var(--text-subtle)"><button onclick="navigate('/login')" style="color:var(--primary);font-weight:600;background:none;border:none;cursor:pointer">Sign in</button> to register for this event</p>`:''}`
+          }
+
+        </div>
+
+        <!-- Share card -->
+        <div class="card" style="padding:1.25rem;margin-top:1rem">
+          <p style="font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.875rem">Share event</p>
+          <div style="display:flex;gap:.5rem">
+            <button class="btn btn-secondary btn-sm" style="flex:1;font-size:.75rem" onclick="navigator.clipboard.writeText(window.location.href).then(()=>showToast('Link copied!','success'))">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Copy link
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+  </div>`;
+
+  // Responsive: collapse grid on narrow screens
+  const layout=document.getElementById('ed-layout');
+  function checkWidth(){if(layout){layout.style.gridTemplateColumns=window.innerWidth<768?'1fr':'1fr 320px';}}
+  checkWidth();
+  window.addEventListener('resize',checkWidth);
 }
 async function registerForEvent(id){
   if(!isLoggedIn()){navigate('/login');return;}
+  const btn=document.getElementById('ed-reg-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin .7s linear infinite"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg> Registering…';}
   try{
     await fetch(API_URL+'/registrations/create/?event_id='+id,{method:'POST',headers:{'Authorization':'Bearer '+getToken()}});
+    // Update local user state
     const u=currentUser();
     if(u){if(!u.registered_events)u.registered_events=[];if(!u.registered_events.includes(id))u.registered_events.push(id);saveUser(u,getToken());}
-    showToast('Successfully registered!','success');
-    renderEventDetail();
-  }catch(err){showToast('Registration failed: '+err.message,'error');}
+    // Update the cached event attendee count optimistically
+    const e=window._currentEventData;
+    if(e){
+      const oldCount=e.attendees_count??e.attendees??0;
+      const newCount=oldCount+1;
+      if(e.attendees_count!==undefined)e.attendees_count=newCount;
+      else e.attendees=newCount;
+      // Live-update the DOM elements without full re-render
+      const capacity=e.capacity??e.max_attendees??500;
+      const newPct=Math.min(100,Math.round((newCount/capacity)*100));
+      const newSpots=Math.max(0,capacity-newCount);
+      const attLabel=document.getElementById('ed-attendees-label');
+      const pctLabel=document.getElementById('ed-pct-label');
+      const spotsLabel=document.getElementById('ed-spots-label');
+      const progFill=document.getElementById('ed-progress-fill');
+      if(attLabel){attLabel.textContent=`${newCount} / ${capacity} attending`;attLabel.style.animation='countUp .4s ease both';}
+      if(pctLabel){pctLabel.textContent=`${newPct}% full`;}
+      if(spotsLabel){spotsLabel.textContent=newSpots>0?`${newSpots} spot${newSpots===1?'':'s'} remaining`:'Fully booked';if(newSpots===0)spotsLabel.style.color='var(--danger)';}
+      if(progFill){progFill.style.width=newPct+'%';}
+    }
+    showToast('You\'re registered! 🎉','success');
+    // Replace CTA with success state
+    const regBtn=document.getElementById('ed-reg-btn');
+    if(regBtn){
+      const wrap=regBtn.parentElement;
+      wrap.innerHTML=`<button class="btn btn-success btn-full btn-lg" style="cursor:default;pointer-events:none;font-size:.9375rem">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        You're registered
+      </button>
+      <p style="text-align:center;font-size:.75rem;color:var(--text-subtle);margin-top:.625rem">A confirmation has been sent to your email</p>`;
+    }
+  }catch(err){
+    if(btn){btn.disabled=false;btn.innerHTML=`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>Register now`;}
+    showToast('Registration failed: '+err.message,'error');
+  }
 }
 
 // ── Dashboard ──

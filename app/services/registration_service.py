@@ -40,12 +40,17 @@ class RegistrationService:
         if existing.scalars().first():
             raise HTTPException(400, "User already registered for this event")
 
+
         current = await self.db.execute(
             select(Registration).where(Registration.event_id == event_id)
         )
 
         if len(current.scalars().all()) >= event.max_attendees:
             raise HTTPException(400, "Event is at maximum capacity")
+
+        event.max_attendees -= 1
+        await self.db.commit()
+        await self.db.refresh(event)
 
         db_registration = Registration(
             user_id=user_id,
