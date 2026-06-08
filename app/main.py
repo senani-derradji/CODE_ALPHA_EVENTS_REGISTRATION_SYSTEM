@@ -63,38 +63,7 @@ async def startup():
     await init_db()
     await create_user()
     start_scheduler()
-    print(f"""
-          ---------------------------------------
-          DEBUG :
-          {settings.DATABASE_URL}
-          {settings.SECRET_KEY}
-          {settings.ACCESS_TOKEN_EXPIRE_HOURS}
-          {settings.FRONTEND_URL}
-          {settings.DOMAIN}
-          {settings.RATE_LIMIT_API}
-          {settings.RATE_LIMIT_AUTH}
-          {settings.MICROSOFT_CLIENT_ID}
-          {settings.MICROSOFT_CLIENT_SECRET}
-          {settings.MICROSOFT_REDIRECT_URI}
-          {settings.MICROSOFT_TENANT_ID}
-          {settings.SENDER_EMAIL}
-          {settings.EMAIL_APP_PASSWORD}
-          {settings.TOKEN_VALIDATION_SECRET}
-          {settings.REDIS_URL}
-          {settings.admin_username}
-          {settings.admin_email}
-          {settings.admin_password}
-          ------------------------------------------
-          """)
-
-
-@app.get("/", include_in_schema=False)
-async def frontend():
-    return FileResponse(
-        BASE_DIR / "frontend" / "index.html"
-    )
-
-
+    
 
 @app.get("/api", tags=["System"])
 async def api_info():

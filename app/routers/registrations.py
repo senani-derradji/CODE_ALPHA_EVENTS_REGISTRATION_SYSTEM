@@ -37,6 +37,9 @@ async def create_registration(
         event_id=event.id
     )
 
+    registration_service = RegistrationService(db)
+    registration_db =  await registration_service.create_registration(registration)
+
 
     try:
         await notification.send_registration_confirmation(
@@ -49,10 +52,9 @@ async def create_registration(
     except Exception as e:
         print(e)
 
+    return registration_db
 
 
-    registration_service = RegistrationService(db)
-    return await registration_service.create_registration(registration)
 
 @router.get("/get_registrations/", response_model=list[RegstrationResponse])
 async def get_registrations(
@@ -159,7 +161,7 @@ async def cancel_registration(
     if (current_user.role == "admin" or
         current_user.id == registration.user_id or
         (current_user.role == "organization" and event and event.organizer_id == current_user.id)):
-        registration_service.cancel_registration(registration_id)
+        await registration_service.cancel_registration(registration_id)
         return None
 
     raise HTTPException(
